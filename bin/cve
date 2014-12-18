@@ -1,0 +1,56 @@
+#! /usr/bin/env ruby
+
+require 'cve'
+require 'pp'
+require 'terminal-table'
+require 'ostruct'
+require 'optparse'
+
+distros = {
+  'RHEL'   => CVE::Status::RHEL.new,
+  'Debian' => CVE::Status::Debian.new
+}
+
+options = OpenStruct.new
+options.distros = []
+
+option_parser = OptionParser.new do |opts|
+  opts.banner = "Usage: cve [--distro a,b,c] [options]"
+  opts.on('-d DIST1,DIST2', '--distro DIST1,DIST2', Array) do |dists|
+    dists.each do |dist|
+      unless distros[dist] 
+        puts "Distribution #{dist} not recognised. Skipping"
+      else
+        options.distros.push(dist)
+      end
+    end
+  end
+end
+
+option_parser.parse!
+
+options.distros = distros.keys if options.distros.empty?
+
+cve = ARGV.shift || 'CVE-2012-3499'
+
+output = []
+
+options.distros.each do |distro, info|
+  release_info = distros[distro].status(cve)
+  url = distros[distro].get_url(cve)
+  status = distros[distro].output(release_info)
+
+  output.push([distro, url])
+
+  status.each do |name, info|
+    status_string = info['status'] == 'fixed' ? '✅ ' : '❌ '
+    status_string << " (#{info['errata']})" if info['errata']
+    output.push([name, status_string])
+  end
+end
+
+puts "Showing information for: #{cve}"
+puts Terminal::Table.new :rows => output
+
+puts 'Debian information does not take account of backported security fixes.'
+
